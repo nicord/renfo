@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Renfo — lecteur de séance</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #111114; color: #e6e6e8; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px); overflow: hidden;
+}
+header { padding: 12px 0 6px; flex-shrink: 0; }
+h1 { font-size: 1.02em; margin: 0; font-weight: 600; }
+.sub { font-size: .8em; color: #8b8b92; margin-top: 2px; }
+#picker {
+  width: 100%; margin-top: 10px; padding: 11px 38px 11px 13px; font-size: .88em; font-weight: 600; font-family: inherit;
+  border: 1px solid #3a3a40; background: #1c1c22; color: #e6e6e8; border-radius: 11px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e07a3f' stroke-width='3' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 15px;
+}
+#picker:disabled { opacity: .45; cursor: default; }
+#picker option { background: #1c1c22; color: #e6e6e8; }
+#main { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 0; }
+#phase { font-size: .76em; letter-spacing: .14em; text-transform: uppercase; color: #e07a3f; font-weight: 700; }
+#name { font-size: 1.75em; line-height: 1.15; font-weight: 650; margin: 9px 0 4px; }
+#detail { font-size: .92em; color: #a8a8b0; min-height: 1.2em; }
+#timer { font-size: 4.8em; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1; margin: 12px 0 5px; }
+#next { font-size: .82em; color: #74747c; margin-top: 5px; }
+#cue { font-size: .88em; color: #e0b07a; margin-top: 12px; max-width: 30em; line-height: 1.45; }
+body.resting #phase, body.resting #timer { color: #4a9db8; }
+body.done #timer { font-size: 2.8em; }
+#bar { height: 4px; background: #26262c; border-radius: 2px; overflow: hidden; flex-shrink: 0; margin-bottom: 12px; }
+#fill { height: 100%; width: 0%; background: #e07a3f; transition: width .25s linear; }
+body.resting #fill { background: #4a9db8; }
+#gwrap { flex-shrink: 0; margin-bottom: 9px; }
+#gmeta { display: flex; justify-content: space-between; font-size: .72em; color: #74747c; letter-spacing: .04em; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+#gbar { height: 3px; background: #1e1e24; border-radius: 2px; overflow: hidden; }
+#gfill { height: 100%; width: 0%; background: #55555f; transition: width .25s linear; }
+body.done #gfill { background: #e07a3f; }
+#controls { display: flex; gap: 10px; flex-shrink: 0; }
+button {
+  flex: 1; padding: 15px 8px; font-size: .95em; font-weight: 600; border: 1px solid #3a3a40; background: #1c1c22;
+  color: #e6e6e8; border-radius: 11px; font-family: inherit; cursor: pointer;
+}
+button:active { background: #2a2a32; }
+#play { background: #e07a3f; border-color: #e07a3f; color: #17130f; flex: 2; }
+body.resting #play { background: #4a9db8; border-color: #4a9db8; }
+#list { position: fixed; inset: 0; background: #111114; padding: 20px 18px calc(env(safe-area-inset-bottom) + 20px); overflow-y: auto; display: none; z-index: 10; }
+#list.open { display: block; }
+#list h2 { font-size: 1em; margin: 0 0 12px; }
+#list h2.sec { margin: 26px 0 4px; padding-top: 18px; border-top: 1px solid #2a2a32; }
+#list .secsub { font-size: .8em; color: #74747c; margin: 0 0 14px; line-height: 1.45; }
+#list ol { padding-left: 1.3em; margin: 0; }
+#list li { font-size: .88em; margin-bottom: 6px; color: #c8c8d0; }
+#list li.rest { color: #6a6a72; font-style: italic; }
+#list li.cur { color: #e07a3f; font-weight: 600; }
+#prog { width: 100%; min-height: 84px; background: #17171c; color: #e6e6e8; border: 1px solid #3a3a40; border-radius: 11px; padding: 10px; font: .82em ui-monospace, Menlo, monospace; }
+.row { display: flex; gap: 10px; margin: 8px 0 0; }
+.row button { padding: 11px 8px; font-size: .85em; }
+#msg { font-size: .78em; color: #e0b07a; margin-top: 6px; min-height: 1.2em; }
+.ex { border: 1px solid #2a2a32; border-radius: 11px; padding: 13px 14px; margin-bottom: 12px; background: #17171c; }
+.ex h3 { margin: 0 0 9px; font-size: .96em; color: #e07a3f; line-height: 1.3; }
+.ex p { margin: 0 0 9px; font-size: .85em; line-height: 1.5; color: #c8c8d0; }
+.ex p:last-child { margin-bottom: 0; }
+.ex strong { color: #e6e6e8; }
+.lbl { display: block; font-size: .69em; letter-spacing: .1em; text-transform: uppercase; color: #74747c; font-weight: 700; margin-bottom: 3px; }
+.ex .warn { color: #e0b07a; } .ex .warn .lbl { color: #b0864f; }
+.ex .goal { color: #8b8b92; font-style: italic; }
+#close { margin-top: 18px; width: 100%; } #topclose { margin-bottom: 16px; width: 100%; }
+.hint { font-size: .78em; color: #6a6a72; text-align: center; margin-top: 9px; line-height: 1.5; }
+code { font-size: .92em; color: #c8c8d0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="title">💪 Renfo</h1>
+  <div class="sub" id="subtitle"></div>
+  <select id="picker" aria-label="Choisir une séance type"></select>
+</header>
+
+<div id="main">
+  <div id="phase">Prêt</div>
+  <div id="name">Appuie sur Démarrer</div>
+  <div id="detail"></div>
+  <div id="timer">--:--</div>
+  <div id="next"></div>
+  <div id="cue">Pose le téléphone à côté de toi. Les changements d'étape sont annoncés par un bip — tu n'as pas besoin de regarder l'écran.</div>
+</div>
+
+<div id="gwrap">
+  <div id="gmeta"><span id="gleft">Séance · 0 %</span><span id="gright"></span></div>
+  <div id="gbar"><div id="gfill"></div></div>
+</div>
+<div id="bar"><div id="fill"></div></div>
+
+<div id="controls">
+  <button id="prev">◀︎</button>
+  <button id="play">Démarrer</button>
+  <button id="skip">▶︎</button>
+  <button id="show">☰</button>
+</div>
+<div class="hint">Lance aussi <strong>Musculation → Libre</strong> sur la montre, pour l'enregistrement.</div>
+
+<div id="list">
+  <button id="topclose">Fermer</button>
+  <h2>Programme (modifiable)</h2>
+  <p class="secsub">Identifiants d'exercices séparés par des virgules. <code>id</code> ou <code>id:durée</code> · <code>r45</code> repos · <code>[...]x2</code> répétition · <code>@nom</code> séance type · <code>~Nom~40</code> étape libre. Les exercices à deux côtés sont dédoublés (droite puis gauche).</p>
+  <textarea id="prog" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  <div class="row"><button id="apply">Appliquer</button><button id="copy">Copier le lien</button></div>
+  <div id="msg"></div>
+  <h2 class="sec">Déroulé de la séance</h2>
+  <ol id="steps"></ol>
+  <h2 class="sec">Les exercices en détail</h2>
+  <p class="secsub">Chaque exercice de cette séance, une seule fois, dans l'ordre d'apparition. À lire une fois calmement — pendant la séance, le bandeau orange suffit.</p>
+  <div id="exdetail"></div>
+  <h2 class="sec">Catalogue des identifiants</h2>
+  <p class="secsub" id="catalog"></p>
+  <button id="close">Fermer</button>
+</div>
+
+<!-- ═════════ Base de données : exercices et séances types ═════════
+     Pour ajouter un exercice : ajouter une entrée dans « ex ». Champs :
+     t titre · p phase affichée · d durée par défaut (s) · rest repos automatique après (s)
+     sides true = droite puis gauche · s dose affichée · cue consigne du bandeau
+     m mise en place · e exécution · w erreurs à éviter · g ce que ça vise -->
+<script type="application/json" id="db">
+{
+"presets": {
+  "echauf":       { "t": "Échauffement complet", "p": "hip,swing-ap,swing-lat,knees,r30" },
+  "echauf-court": { "t": "Échauffement court",   "p": "hip:90,swing-ap:45,swing-lat:45,r20" },
+  "reprise":      { "t": "Reprise · poids de corps (léger)", "p": "@echauf,[bridge,abd,clam,sldl,r60]x2,[plank]x2,[sp-knees:25]x2" },
+  "maintenance":  { "t": "Maintenance · élastique",          "p": "@echauf-court,[bridge-band,monster,abd-band,clam,sldl,r60]x2,[plank:45]x2,[sp-feet]x2" },
+  "entretien":    { "t": "Entretien court (1 tour)",         "p": "@echauf-court,bridge-band,abd,clam,sldl,r45,abd:40,clam:40,r30,plank:45,sp-any" },
+  "sans-materiel":{ "t": "Sans matériel (voyage)",           "p": "@echauf-court,[bridge-sl:55,step-up,abd,clam,sldl,r60]x2,[plank:45]x2,[sp-any]x2" }
+},
+"ex": {
+  "hip": { "t": "Cercles de hanche", "p": "Échauffement", "d": 90, "rest": 0, "s": "10 par sens, par jambe",
+    "cue": "Allongé sur le dos, genou plié à 90°. Le bassin reste posé, seule la hanche bouge. Compare les deux côtés.",
+    "m": "Allongé sur le dos, une jambe tendue au sol. L'autre genou ramené vers la poitrine, plié à 90°. Bras le long du corps, bas du dos posé.",
+    "e": "Dessine un cercle avec le genou, lentement, en partant petit et en agrandissant. <strong>10 dans un sens, 10 dans l'autre, puis change de jambe.</strong> Seule la hanche bouge.",
+    "w": "Le bassin qui bascule ou le bas du dos qui se creuse pour gagner de l'amplitude. Ne pars pas grand d'emblée, à froid.",
+    "g": "Mobilité de hanche, et <strong>test d'asymétrie</strong> : compare les deux côtés à chaque séance et note. Si tu enchaînes après un footing et sautes l'échauffement, garde quand même celui-ci." },
+  "swing-ap": { "t": "Balancements de jambe — avant / arrière", "p": "Échauffement", "d": 60, "rest": 0, "s": "~15 par jambe",
+    "cue": "Debout, appui au mur. Bassin fixe, amplitude modérée.",
+    "m": "Debout de profil à un mur, une main en appui. Poids sur la jambe intérieure, jambe extérieure libre et relâchée.",
+    "e": "Balance la jambe d'avant en arrière, relâchée, sur un rythme régulier. <strong>~15 par jambe.</strong> Amplitude modérée.",
+    "w": "Le bassin qui suit le mouvement et le dos qui se cambre vers l'arrière. Pas d'à-coup en fin de course : ce n'est pas un étirement.",
+    "g": "Mise en température des fléchisseurs et des ischios avant le travail au sol." },
+  "swing-lat": { "t": "Balancements de jambe — latéraux", "p": "Échauffement", "d": 60, "rest": 0, "s": "~15 par jambe",
+    "cue": "Face au mur. Ne force pas.",
+    "m": "Face au mur, les deux mains en appui à hauteur d'épaules. Buste droit.",
+    "e": "La jambe balance de gauche à droite devant le corps, buste immobile. <strong>~15 par jambe.</strong>",
+    "w": "Pencher le buste du côté opposé pour gagner de l'amplitude.",
+    "g": "Réveil des abducteurs et adducteurs dans le <strong>plan frontal</strong>." },
+  "knees": { "t": "Marche sur place, genoux hauts", "p": "Échauffement", "d": 45, "rest": 0, "s": "45 s",
+    "cue": "Juste pour faire monter la température.",
+    "m": "Debout, sur place.", "e": "45 s de marche genoux hauts, rythme facile.",
+    "w": "En faire un exercice : tu ne dois pas être essoufflé en arrivant au premier pont fessier.",
+    "g": "Faire monter la température, rien d'autre." },
+  "bridge": { "t": "Pont fessier", "p": "Bloc", "d": 85, "rest": 30, "s": "12 reps · tempo 2-3-2",
+    "cue": "2 s pour monter — 3 s de maintien en haut, fessiers serrés — 2 s pour descendre. Ne cambre pas le bas du dos.",
+    "m": "Allongé sur le dos, pieds à plat, <strong>talons proches des fessiers</strong>, écartés largeur de bassin. Bras le long du corps, paumes au sol.",
+    "e": "Tempo <strong>2-3-2</strong> : 2 s pour monter en poussant dans les <strong>talons</strong>, 3 s de maintien en haut fessiers serrés fort, 2 s pour redescendre en contrôlant. En haut : ligne droite genou-hanche-épaule.",
+    "w": "Monter en cambrant le bas du dos au lieu de serrer les fessiers — <strong>si tu sens tes lombaires, tu montes trop haut.</strong> Pousser sur les orteils au lieu des talons. Enchaîner sans le maintien de 3 s : c'est lui qui fait la séance.",
+    "g": "Extension de hanche, chaîne postérieure." },
+  "bridge-band": { "t": "Pont fessier — élastique", "p": "Bloc", "d": 105, "rest": 30, "s": "15 reps · élastique · 2-3-2",
+    "cue": "Élastique JUSTE AU-DESSUS des genoux, poussés vers l'extérieur pendant toute la répétition. 2 s monter, 3 s tenir, 2 s descendre.",
+    "m": "Comme le pont fessier, avec un élastique <strong>juste au-dessus des genoux</strong>, pas sur les cuisses.",
+    "e": "Tempo <strong>2-3-2</strong>. Pousse les genoux vers l'extérieur pendant <em>toute</em> la répétition, montée comme descente.",
+    "w": "Laisser les genoux céder vers l'intérieur sous l'élastique. Monter en cambrant. Sauter le maintien de 3 s.",
+    "g": "Extension de hanche et abduction chargée <strong>en position de hanche étendue, là où le TFL est mécaniquement désavantagé</strong> : le moyen fessier ne peut pas être remplacé." },
+  "bridge-sl": { "t": "Pont fessier unijambiste", "p": "Bloc", "d": 55, "rest": 20, "sides": true, "s": "10 reps par jambe · 2-3-2",
+    "cue": "Un pied au sol, l'autre genou vers la poitrine. Le bassin reste HORIZONTAL : s'il s'affaisse du côté libre, fin de série.",
+    "m": "Allongé sur le dos, un pied à plat, l'autre genou ramené vers la poitrine.",
+    "e": "Monte le bassin en poussant dans le talon d'appui, fessier serré en haut. Le bassin reste horizontal.",
+    "w": "Le bassin qui s'affaisse du côté libre : c'est le moyen fessier d'appui qui lâche, signal de fin de série.",
+    "g": "Remplace l'élastique par ton propre poids, sans matériel. Compare la stabilité du bassin entre les deux côtés." },
+  "monster": { "t": "Monster walk latéral", "p": "Bloc", "d": 40, "rest": 25, "s": "8 pas aller / 8 retour",
+    "cue": "Élastique au-dessus des genoux, demi-squat léger, pieds parallèles. Les pieds ne se rejoignent jamais.",
+    "m": "Élastique juste au-dessus des genoux. Pieds écartés largeur de bassin, <strong>parallèles, pointes droit devant</strong>. Demi-squat léger : hanches en arrière, poitrine haute.",
+    "e": "<strong>8 pas sur le côté dans un sens, 8 pour revenir.</strong> Pas de taille moyenne, tension constante dans l'élastique. Reste bas pendant toute la série.",
+    "w": "Se redresser au fil des pas (premier signe de fatigue). Laisser le genou d'appui rentrer vers l'intérieur. Tourner les pointes de pieds vers l'extérieur.",
+    "g": "Moyen fessier en charge, hanche neutre à étendue : même logique que le pont élastique." },
+  "abd": { "t": "Abduction couchée sur le côté (dos au mur)", "p": "Bloc", "d": 40, "rest": 20, "sides": true, "s": "12 reps lentes (ou série longue + 10 s de maintien)",
+    "cue": "Couché sur le côté, DOS AU MUR : talons, fesses, omoplates au contact. La jambe monte en restant collée au mur. Si elle s'en décolle, elle part en avant : réduis l'amplitude.",
+    "m": "Couché sur le côté, <strong>DOS AU MUR</strong> : talons, fesses et omoplates au contact. Jambe du dessous fléchie pour la stabilité, jambe du dessus tendue, <strong>dans l'axe du tronc ou très légèrement en arrière</strong>, jamais en avant.",
+    "e": "Monte la jambe lentement <strong>en la gardant collée au mur</strong>, pointe de pied neutre ou tournée légèrement vers le sol. Redescends en contrôlant. En série longue, finis par 10 s de maintien en haut.",
+    "w": "<strong>(1) La jambe qui quitte le mur</strong> = elle part en avant = c'est le <strong>TFL</strong> qui travaille (le muscle de la bandelette) au lieu du moyen fessier. <strong>(2) Le bassin qui roule en arrière</strong> pour gagner de la hauteur. <strong>30 cm propres valent mieux que 50 cm en trichant.</strong>",
+    "g": "Moyen fessier, en endurance. Une amplitude réduite est assumée. Indicateur à noter : <em>la jambe est-elle restée au mur sur toute la série ?</em>" },
+  "abd-band": { "t": "Abduction couchée avec élastique", "p": "Bloc", "d": 40, "rest": 20, "sides": true, "s": "12 reps + 10 s de maintien",
+    "cue": "Élastique au-dessus des genoux, dos au mur. JAMBE DU DESSOUS TENDUE (les genoux alignés). Si la jambe quitte le mur : enlève l'élastique et finis sans.",
+    "m": "Couché sur le côté, <strong>DOS AU MUR</strong>. Élastique <strong>juste au-dessus des genoux</strong>. Jambe du dessus tendue dans l'axe du tronc.<br><strong>La jambe du dessous se TEND</strong> (à peine fléchie) : repliée à 90°, l'élastique tire la jambe du dessus vers le bas <em>et vers l'avant</em>, donc vers le TFL. Le mur fournit la stabilité.",
+    "e": "Monte lentement <strong>en gardant la jambe collée au mur</strong>, 10 s de maintien en haut pour finir. <strong>12 reps, pas 20</strong> : de la résistance en plus, du volume en moins. Contrôle visuel : si l'élastique part en biais, la jambe du dessous est trop pliée.",
+    "w": "<strong>Règle d'arrêt absolue : dès que la jambe quitte le mur, enlève l'élastique et finis la série sans.</strong> Charger un mouvement mal fait renforce le mauvais muscle plus vite.",
+    "g": "Mise en charge du moyen fessier dans le plan frontal pur. À réserver aux séances où la version sans élastique tient le mur de façon répétée." },
+  "clam": { "t": "Coquille (clamshell)", "p": "Bloc", "d": 40, "rest": 20, "sides": true, "s": "série longue + 10 s de maintien",
+    "cue": "Talons collés, bassin perpendiculaire au sol et immobile. S'il roule en arrière, tu triches.",
+    "m": "Couché sur le côté, hanches fléchies à ~45° et genoux à ~90°. <strong>Talons collés</strong> et alignés avec les fesses et les épaules. Le dos au mur aide ici aussi.",
+    "e": "Ouvre le genou du dessus lentement <strong>en gardant les talons collés</strong>, marque un temps en haut, referme en contrôlant.",
+    "w": "Le bassin qui roule en arrière : pose la main libre sur la hanche du dessus, elle doit rester <strong>perpendiculaire au sol et immobile</strong>. Décoller les talons. Ouvrir vite et grand : l'amplitude utile est petite.",
+    "g": "Rotateurs externes et fibres postérieures du moyen fessier, hanche fléchie. Complémentaire de l'abduction. Élastique optionnel : le mouvement est une rotation <strong>externe</strong>, or le TFL est rotateur <strong>interne</strong>, il ne peut pas prendre le relais." },
+  "bal": { "t": "Équilibre unipodal", "p": "Bloc", "d": 40, "rest": 0, "sides": true, "s": "40 s par pied",
+    "cue": "Pied nu, sol dur, yeux ouverts. Le genou ne part pas vers l'intérieur. Du contrôle, pas de la force.",
+    "m": "<strong>Pied nu, sol dur</strong>, yeux ouverts, regard fixe sur un point devant toi. Un mur à portée de main, sans t'y appuyer.",
+    "e": "Un pied au sol, l'autre décollé sans s'accrocher à la jambe d'appui. Que le pied s'ajuste en permanence est normal, c'est le but.",
+    "w": "Verrouiller le genou d'appui en hyperextension. Regarder ses pieds. S'appuyer au mur « juste un peu ».",
+    "g": "Contrôle du genou d'appui, qui ne part pas vers l'intérieur. Peut être remplacé par le single leg deadlift, qui le contient." },
+  "sldl": { "t": "Single leg deadlift (soulevé de terre unijambiste)", "p": "Bloc", "d": 45, "rest": 20, "sides": true, "s": "8 reps lentes · sans poids",
+    "cue": "Genou d'appui légèrement fléchi et FIXE. Charnière de hanche : épaule-hanche-talon alignés, le bassin ne s'ouvre pas vers le plafond. Descends jusqu'où le dos reste plat.",
+    "m": "Debout sur une jambe, <strong>genou d'appui légèrement fléchi, et il reste comme ça du début à la fin.</strong> Sans poids pour apprendre le mouvement.",
+    "e": "<strong>Charnière de hanche</strong>, pas flexion de genou : le bassin part en arrière, le buste descend, la jambe libre part en arrière dans le prolongement. <strong>Épaule, hanche et talon sur une même ligne.</strong> Remonte en poussant la hanche vers l'avant et en serrant le fessier. 8 reps lentes.",
+    "w": "<strong>Le bassin qui s'ouvre vers le plafond : l'erreur principale.</strong> Imagine deux phares au niveau des hanches, braqués vers le sol. Ensuite : le dos qui s'arrondit, le genou d'appui qui se plie (ça devient un squat), descendre plus bas que le dos ne le permet. Si l'équilibre parasite tout, une main sur le mur.",
+    "g": "Chaîne postérieure <strong>et</strong> contrôle du bassin dans le plan frontal sur un appui unique, le plus proche du geste de course, sans flexion profonde de genou." },
+  "sldl-w": { "t": "Single leg deadlift chargé (un seul altère)", "p": "Bloc", "d": 55, "rest": 25, "sides": true, "s": "8 reps · 5 kg côté opposé · 3 s de descente",
+    "cue": "UN altère de 5 kg dans la main OPPOSÉE à la jambe d'appui. Descente en 3 s. Dos qui s'arrondit ou bassin qui s'ouvre : pose le poids et finis sans.",
+    "m": "Comme sans poids, avec <strong>UN SEUL altère de 5 kg, dans la main opposée à la jambe d'appui</strong> (appui droit → poids main gauche).<br>Pourquoi un seul, et du côté opposé : le poids tire le bassin vers le bas de ce côté, et c'est le <strong>moyen fessier de la jambe d'appui</strong> qui doit tenir.",
+    "e": "<strong>8 reps lentes par jambe. Descente en 3 s, remontée en 1-2 s.</strong> L'amplitude se réduit d'elle-même : c'est le dos plat qui décide.",
+    "w": "<strong>Dos qui s'arrondit ou bassin qui s'ouvre : tu reposes le poids et tu finis la série sans.</strong> Chercher la même profondeur que sans poids. Accélérer la descente.",
+    "g": "Première mise en charge de la chaîne postérieure. À placer <strong>uniquement la veille d'un jour vide ou léger</strong> : les courbatures d'un excentrique nouveau culminent à 24-48 h." },
+  "step-up": { "t": "Montée de marche lente", "p": "Bloc", "d": 70, "rest": 25, "s": "8 par jambe · 2 s haut / 3 s bas",
+    "cue": "Marche, chaise stable ou bord du lit. Monte lentement en 2 s sans t'aider de l'autre pied, redescends en 3 s. Le genou d'appui ne part pas vers l'intérieur.",
+    "m": "Une marche d'escalier, une chaise stable ou le bord du lit — hauteur genou maximum.",
+    "e": "Monte <strong>lentement sur une jambe (2 s)</strong>, sans t'aider de l'autre pied, et redescends en <strong>3 s</strong> en contrôlant. Alterne 8 par jambe.",
+    "w": "Le genou d'appui qui part vers l'intérieur : c'est le seul critère.",
+    "g": "Le geste de la montée raide, en unilatéral et en endurance, sans matériel." },
+  "plank": { "t": "Planche ventrale", "p": "Gainage", "d": 30, "rest": 30, "s": "",
+    "cue": "Bassin en rétroversion légère. Pas de creux lombaire.",
+    "m": "Appui sur les avant-bras, <strong>coudes à l'aplomb des épaules</strong>, et sur les pointes de pieds.",
+    "e": "Bassin en <strong>rétroversion légère</strong> (pubis rentré vers le nombril), fessiers serrés, ligne cheville-hanche-épaule. Pousse activement le sol. Respire normalement.",
+    "w": "Le bassin qui s'affaisse et le creux lombaire : <strong>c'est le signal de fin de série.</strong> Fesses trop hautes. Bloquer la respiration.",
+    "g": "Transfert de force entre les jambes et le tronc." },
+  "sp-knees": { "t": "Planche latérale sur les genoux", "p": "Gainage", "d": 25, "rest": 20, "sides": true, "s": "",
+    "cue": "Sur les GENOUX. Hanche haute : ligne épaule-hanche-genou.",
+    "m": "Sur le côté, appui sur l'avant-bras, <strong>coude sous l'épaule</strong>, genoux fléchis à 90° derrière toi.",
+    "e": "Monte la hanche <strong>haut</strong> et tiens-la : ligne épaule-hanche-genou. Épaule active, tu pousses le sol.",
+    "w": "La hanche qui redescend pendant la série. L'épaule qui s'écrase. Le buste qui roule vers l'avant : reste de profil.",
+    "g": "Version d'entrée. Moyen fessier du côté en appui et chaîne latérale." },
+  "sp-feet": { "t": "Planche latérale sur les pieds", "p": "Gainage", "d": 30, "rest": 20, "sides": true, "s": "",
+    "cue": "Sur les PIEDS. Hanche haute. Si le bassin s'affaisse, repasse sur les genoux.",
+    "m": "Comme sur les genoux, mais appui sur le <strong>bord externe du pied du dessous</strong>, pieds superposés (ou décalés si c'est instable).",
+    "e": "Corps aligné cheville-hanche-épaule, hanche haute.",
+    "w": "Nettement plus dur pour le moyen fessier d'appui. <strong>Si le bassin s'affaisse avant la fin, repasse sur les genoux.</strong> La qualité prime.",
+    "g": "Progression de la version genoux." },
+  "sp-any": { "t": "Planche latérale (genoux ou pieds)", "p": "Gainage", "d": 30, "rest": 20, "sides": true, "s": "",
+    "cue": "Sur les pieds si la hanche reste haute, sinon sur les genoux.",
+    "m": "Sur le côté, appui sur l'avant-bras, coude sous l'épaule. <strong>Sur les pieds si tu tiens la hanche haute, sinon sur les genoux.</strong>",
+    "e": "Hanche haute, ligne épaule-hanche-cheville (ou genou). Épaule active.",
+    "w": "La hanche qui redescend pendant la série : passe sur les genoux et finis proprement.",
+    "g": "Entretien du moyen fessier du côté en appui." }
+}
+}
+</script>
+
+<script>
+const DB = JSON.parse(document.getElementById("db").textContent);
+const $ = id => document.getElementById(id);
+
+// ═════════ Programme : analyse de l'URL ═════════
+// #id,id:durée,r45,[...]x2,@preset,~Nom~40
+function splitTop(s) {
+  const out = []; let d = 0, cur = "";
+  for (const ch of s) {
+    if (ch === "[") d++;
+    if (ch === "]") d--;
+    if (ch === "," && d === 0) { out.push(cur.trim()); cur = ""; } else cur += ch;
+  }
+  out.push(cur.trim());
+  return out.filter(Boolean);
+}
+
+function restStep(d, auto) { return { p: "repos", n: "Repos", d, c: "", rest: true, auto }; }
+
+function expand(str, phase, out, depth) {
+  if (depth > 6) throw new Error("Imbrication trop profonde");
+  for (const tok of splitTop(str)) {
+    if (tok[0] === "@") {
+      const pr = DB.presets[tok.slice(1)];
+      if (!pr) throw new Error("Séance type inconnue : " + tok);
+      expand(pr.p, phase, out, depth + 1); continue;
+    }
+    if (tok[0] === "[") {
+      const m = tok.match(/^\[([\s\S]*)\](?:x(\d+))?$/);
+      if (!m) throw new Error("Groupe mal formé : " + tok);
+      const n = Math.max(1, Math.min(10, +m[2] || 1));
+      for (let k = 1; k <= n; k++) expand(m[1], n > 1 ? "Tour " + k : phase, out, depth + 1);
+      continue;
+    }
+    if (/^r\d*$/.test(tok)) {
+      const d = +tok.slice(1) || 30, last = out[out.length - 1];
+      if (last && last.rest && last.auto) { last.d = d; last.auto = false; }
+      else out.push(restStep(d, false));
+      continue;
+    }
+    if (tok[0] === "~") {
+      const m = tok.match(/^~(.+)~(\d+)$/);
+      if (!m) throw new Error("Étape libre mal formée : " + tok);
+      out.push({ p: phase || "Bloc", n: m[1], d: +m[2], c: "", k: null });
+      out.push(restStep(25, true)); continue;
+    }
+    const [id, dur] = tok.split(":"), e = DB.ex[id];
+    if (!e) throw new Error("Exercice inconnu : " + id);
+    const d = +dur || e.d, ph = (e.p === "Échauffement" || e.p === "Gainage" || !phase) ? e.p : phase;
+    const sides = e.sides ? [" — DROITE", " — GAUCHE"] : [""];
+    sides.forEach((sfx, idx) => {
+      out.push({ p: ph, n: e.t.replace(/ \(.*\)$/, "") + sfx, s: e.s, d, c: e.cue, k: id });
+      if (e.rest > 0) out.push(restStep(e.rest, true));
+    });
+  }
+}
+
+function buildProgram(str) {
+  const out = [];
+  expand(str, null, out, 0);
+  while (out.length && out[out.length - 1].rest) out.pop();
+  if (!out.length) throw new Error("Programme vide");
+  return out;
+}
+
+// ═════════ Lecteur ═════════
+let P = [], prog = "", i = 0, left = 0, running = false, tick = null, wake = null, ctx = null, CUM = [];
+
+function beep(freq, dur, vol) {
+  try {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") ctx.resume();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination); o.frequency.value = freq; o.type = "sine";
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.start(); o.stop(ctx.currentTime + dur);
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(freq > 700 ? [90, 60, 90] : 60);
+}
+async function lock() { try { if ("wakeLock" in navigator) wake = await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && running) lock(); });
+
+const fmt = s => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+const total = () => P.reduce((a, s) => a + s.d, 0);
+function cumulate() { CUM = []; let a = 0; for (const s of P) { CUM.push(a); a += s.d; } }
+
+function renderGlobal() {
+  const T = total(), fini = i >= P.length;
+  const passe = fini ? T : (CUM[i] || 0) + (P[i].d - left);
+  const pct = T ? Math.min(100, 100 * passe / T) : 0;
+  $("gfill").style.width = pct + "%";
+  $("gleft").textContent = fini ? "Séance terminée" : "Séance · " + Math.round(pct) + " %";
+  $("gright").textContent = fini ? fmt(T) + " au total" : fmt(T - passe) + " restant";
+}
+
+function drawList() {
+  $("steps").innerHTML = "";
+  P.forEach(s => {
+    const li = document.createElement("li");
+    li.textContent = (s.rest ? "Repos" : s.n + (s.s ? " — " + s.s : "")) + " · " + s.d + " s";
+    if (s.rest) li.className = "rest";
+    $("steps").appendChild(li);
+  });
+  const seen = [], dose = {}, count = {};
+  P.forEach(s => {
+    if (s.rest || !s.k) return;
+    if (!seen.includes(s.k)) { seen.push(s.k); dose[s.k] = []; count[s.k] = 0; }
+    count[s.k]++;
+    const d = (s.s ? s.s + " · " : "") + s.d + " s";
+    if (!dose[s.k].includes(d)) dose[s.k].push(d);
+  });
+  const row = (l, t, c) => t ? "<p" + (c ? ' class="' + c + '"' : "") + '><span class="lbl">' + l + "</span>" + t + "</p>" : "";
+  $("exdetail").innerHTML = seen.map(k => {
+    const e = DB.ex[k], n = count[k];
+    return '<div class="ex"><h3>' + e.t + "</h3>"
+      + row("Aujourd'hui", n + (n > 1 ? " passages" : " passage") + " · " + dose[k].join(" / "))
+      + row("Mise en place", e.m) + row("Exécution", e.e)
+      + row("Erreurs à éviter", e.w, "warn") + row("Ce que ça vise", e.g, "goal") + "</div>";
+  }).join("");
+}
+
+function setProgram(str, label) {
+  P = buildProgram(str); prog = str;
+  i = 0; left = P[0].d; running = false; clearInterval(tick); cumulate();
+  $("title").textContent = "💪 Renfo" + (label ? " — " + label : "");
+  $("subtitle").textContent = "~" + Math.round(total() / 60) + " min · " + P.filter(s => !s.rest).length + " étapes";
+  $("prog").value = str;
+  const presetKey = Object.keys(DB.presets).find(k => str === "@" + k);
+  $("picker").value = presetKey ? "@" + presetKey : "";
+  drawList(); render();
+}
+
+function render() {
+  renderGlobal();
+  if (i >= P.length) {
+    document.body.className = "done";
+    $("phase").textContent = "Terminé"; $("name").textContent = "Séance bouclée 💪"; $("detail").textContent = "";
+    $("timer").textContent = Math.round(total() / 60) + " min"; $("next").textContent = "";
+    $("cue").innerHTML = "Sauvegarde l'activité <strong>Musculation</strong> sur la montre.";
+    $("fill").style.width = "100%"; $("play").textContent = "Recommencer";
+    running = false; clearInterval(tick); beep(880, .5, .25); return;
+  }
+  const s = P[i];
+  document.body.className = s.rest ? "resting" : "";
+  $("phase").textContent = s.rest ? "Repos" : s.p;
+  $("name").textContent = s.n; $("detail").textContent = s.s || "";
+  $("timer").textContent = fmt(left); $("cue").textContent = s.c || "";
+  const nx = P[i + 1];
+  $("next").textContent = nx ? "Ensuite : " + (nx.rest ? "repos " + nx.d + " s" : nx.n) : "Dernier exercice";
+  $("fill").style.width = (100 * (s.d - left) / s.d) + "%";
+  $("play").textContent = running ? "Pause" : (i === 0 && left === P[0].d ? "Démarrer" : "Reprendre");
+  $("picker").disabled = running;
+  document.querySelectorAll("#steps li").forEach((el, k) => el.classList.toggle("cur", k === i));
+}
+
+function step() {
+  left--;
+  if (left <= 3 && left > 0) beep(520, .09, .16);
+  if (left <= 0) {
+    i++;
+    if (i < P.length) { left = P[i].d; beep(P[i].rest ? 480 : 880, .32, .28); } else { render(); return; }
+  }
+  render();
+}
+
+$("play").onclick = () => {
+  if (i >= P.length) { i = 0; left = P[0].d; running = false; }
+  if (!ctx) beep(660, .05, .05);
+  running = !running;
+  if (running) { lock(); tick = setInterval(step, 1000); }
+  else { clearInterval(tick); if (wake) { wake.release(); wake = null; } }
+  render();
+};
+$("skip").onclick = () => { if (i < P.length) { i++; left = i < P.length ? P[i].d : 0; render(); } };
+$("prev").onclick = () => { if (left < P[i].d - 2) left = P[i].d; else if (i > 0) { i--; left = P[i].d; } render(); };
+$("show").onclick = () => { $("list").scrollTop = 0; $("list").classList.add("open"); };
+$("close").onclick = $("topclose").onclick = () => $("list").classList.remove("open");
+
+// ═════════ Sélecteur, éditeur, lien ═════════
+$("picker").innerHTML = '<option value="">Programme personnalisé</option>'
+  + Object.entries(DB.presets).map(([k, v]) => '<option value="@' + k + '">' + v.t + "</option>").join("");
+$("catalog").innerHTML = Object.entries(DB.ex).map(([k, v]) => "<code>" + k + "</code> " + v.t).join("<br>")
+  + "<br><br>Séances types : " + Object.keys(DB.presets).map(k => "<code>@" + k + "</code>").join(" ");
+
+function go(str) {
+  try {
+    history.replaceState(null, "", "#" + str);
+    setProgram(str, ""); $("msg").textContent = "";
+    return true;
+  } catch (e) { $("msg").textContent = e.message; return false; }
+}
+$("picker").onchange = e => { if (e.target.value) go(e.target.value); };
+$("apply").onclick = () => { if (go($("prog").value.trim())) $("list").classList.remove("open"); };
+$("copy").onclick = async () => {
+  const url = location.href.split("#")[0] + "#" + $("prog").value.trim();
+  try { await navigator.clipboard.writeText(url); $("msg").textContent = "Lien copié."; }
+  catch (e) { $("msg").textContent = url; }
+};
+window.addEventListener("hashchange", () => { if (!running) loadFromHash(); });
+
+function loadFromHash() {
+  $("msg").textContent = "";
+  let h = decodeURIComponent(location.hash.replace(/^#/, "")).trim();
+  if (!h) h = "@reprise";
+  try { setProgram(h, ""); } catch (e) { $("msg").textContent = e.message; setProgram("@reprise", ""); }
+}
+loadFromHash();
+</script>
+</body>
+</html>
